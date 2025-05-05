@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transaction History</title>
+  <style>
+    :root {
+      --bg: #0f0f1a;
+      --card: #1e1e2e;
+      --primary: #4fc3f7;
+      --success: #00e676;
+      --danger: #ff5252;
+      --text: #fff;
+      --muted: #aaa;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
+      direction: rtl;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      font-size: 24px;
+      padding: 15px;
+      background: var(--card);
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .search-bar input, .search-bar button, .currency-select {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: #252536;
+      color: var(--text);
+      min-width: 0;
+    }
+
+    .search-bar button {
+      background: var(--primary);
+      color: #000;
+      cursor: pointer;
+    }
+
+    .currency-select {
+      background: #252536;
+      color: var(--text);
+    }
+
+    .balance-display {
+      text-align: center;
+      font-size: 18px;
+      color: var(--success);
+      margin-bottom: 15px;
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .action-buttons input, .action-buttons button {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      min-width: 110px;
+    }
+
+    .action-buttons input {
+      background: #2c2c3d;
+      color: var(--text);
+    }
+
+    .action-buttons button {
+      background: var(--primary);
+      color: #000;
+      cursor: pointer;
+    }
+
+    .action-buttons button.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .form-section {
+      display: none;
+      background: var(--card);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .form-section input, .form-section textarea, .form-section select {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      background: #2a2a3d;
+      color: var(--text);
+      border: none;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .form-section button {
+      width: 100%;
+      padding: 12px;
+      font-size: 17px;
+      background: var(--success);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .transfers-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .transfer-item {
+      background: var(--card);
+      padding: 12px;
+      border-radius: 12px;
+    }
+
+    .transfer-details p {
+      margin: 4px 0;
+    }
+
+    .date-time {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .notification {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--success);
+      color: #000;
+      padding: 10px 20px;
+      font-weight: bold;
+      border-radius: 20px;
+      z-index: 999;
+    }
+
+    @media (max-width: 480px) {
+      .header {
+        font-size: 20px;
+      }
+
+      .search-bar input, .search-bar button,
+      .action-buttons input, .action-buttons button,
+      .form-section input, .form-section textarea, .form-section button, .form-section select {
+        font-size: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">Money Transfer</div>
+
+  <div class="search-bar">
+    <input type="text" placeholder="Search by name or note..." oninput="filterTransfers(this.value)">
+    <select class="currency-select" id="currency" onchange="changeCurrency()">
+      <option value="EGP">EGP</option>
+      <option value="USD">USD</option>
+    </select>
+    <button onclick="print()">🖨</button>
+  </div>
+
+  <div class="balance-display" id="balance-display"></div>
+
+  <div class="action-buttons">
+    <input type="number" id="recharge-amount" placeholder="Recharge amount">
+    <button onclick="rechargeBalance()">Recharge</button>
+    <button onclick="toggleForm()">Transfer</button>
+    <button class="danger" onclick="resetAll()">Clear</button>
+  </div>
+
+  <div class="form-section" id="transfer-form">
+    <select id="transfer-type">
+      <option value="InstaPay">InstaPay</option>
+      <option value="E-Wallet">E-Wallet</option>
+      <option value="Bank Account">Bank Account</option>
+      <option value="Other">Other</option>
+    </select>
+    <textarea id="transfer-details" placeholder="Recipient number or note..."></textarea>
+    <input type="number" id="transfer-amount" placeholder="Transfer amount">
+    <button onclick="sendTransfer()">Send Transfer</button>
+  </div>
+
+  <div class="transfers-list" id="transfers-list"></div>
+
+  <div class="notification" id="notification"></div>
+
+  <script>
+    let balance = parseFloat(localStorage.getItem('balance')) || 1000;
+    let transfers = JSON.parse(localStorage.getItem('transfers') || '[]');
+    let currency = localStorage.getItem('currency') || 'EGP';
+    const exchangeRate = 45; // 1 USD = 45 EGP
+    let pendingTransfer = null;
+
+    document.getElementById('currency').value = currency;
+
+    function convert(amount, from, to) {
+      if (from === to) return amount;
+      return from === 'EGP' ? amount / exchangeRate : amount * exchangeRate;
+    }
+
+    function format(amount) {
+      return amount.toLocaleString('en-EG', { minimumFractionDigits: 2 }) + ' ' + currency;
+    }
+
+    function updateBalanceDisplay() {
+      document.getElementById('balance-display').innerText = `${format(balance)}`;
+      localStorage.setItem('balance', balance);
+    }
+
+    function changeCurrency() {
+      const newCurrency = document.getElementById('currency').value;
+      if (newCurrency !== currency) {
+        balance = convert(balance, currency, newCurrency);
+        currency = newCurrency;
+        localStorage.setItem('currency', currency);
+        updateBalanceDisplay();
+        renderTransfers();
+      }
+    }
+
+    function showNotification(msg) {
+      const note = document.getElementById('notification');
+      note.innerText = msg;
+      note.style.display = 'block';
+      setTimeout(() => note.style.display = 'none', 3000);
+    }
+
+    function toggleForm() {
+      const form = document.getElementById('transfer-form');
+      form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function rechargeBalance() {
+      const amount = parseFloat(document.getElementById('recharge-amount').value);
+      if (amount > 0) {
+        balance += amount;
+        updateBalanceDisplay();
+        showNotification(`✅ ${format(amount)} added successfully`);
+        document.getElementById('recharge-amount').value = '';
+      }
+    }
+
+    function sendTransfer() {
+      const type = document.getElementById('transfer-type').value;
+      const details = document.getElementById('transfer-details').value.trim();
+      const amount = parseFloat(document.getElementById('transfer-amount').value);
+
+      if (!details || isNaN(amount) || amount <= 0) {
+        alert('Please enter valid details.');
+        return;
+      }
+
+      if (amount > balance) {
+        alert('Insufficient balance.');
+        return;
+      }
+
+      const now = new Date();
+      pendingTransfer = {
+        id: Date.now(),
+        type,
+        details,
+        amount,
+        time: now.toLocaleTimeString('en-EG'),
+        date: now.toLocaleDateString('en-EG')
+      };
+
+      const confirmationText = `\n🔒 Confirm Transfer:\n\n📤 Type: ${pendingTransfer.type}\n👤 To: ${pendingTransfer.details}\n💸 Amount: ${format(pendingTransfer.amount)}\n🕒 Time: ${pendingTransfer.time}\n📅 Date: ${pendingTransfer.date}\n\nProceed?`;
+
+      if (confirm(confirmationText)) {
+        confirmTransfer();
+      } else {
+        pendingTransfer = null;
+      }
+    }
+
+    function confirmTransfer() {
+      if (!pendingTransfer) return;
+
+      transfers.unshift(pendingTransfer);
+      localStorage.setItem('transfers', JSON.stringify(transfers));
+      balance -= pendingTransfer.amount;
+      updateBalanceDisplay();
+      renderTransfers();
+
+      document.getElementById('transfer-details').value = '';
+      document.getElementById('transfer-amount').value = '';
+      showNotification(`✅ ${format(pendingTransfer.amount)} transferred to ${pendingTransfer.details}`);
+
+      pendingTransfer = null;
+    }
+
+    function renderTransfers(filter = '') {
+      const list = document.getElementById('transfers-list');
+      list.innerHTML = '';
+      transfers.filter(t => t.details.includes(filter)).forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'transfer-item';
+        div.innerHTML = `
+          <div class="transfer-details">
+            <p><strong>${t.details}</strong></p>
+            <p>💸 ${format(t.amount)}</p>
+            <p>📤 Type: ${t.type}</p>
+            <p class="date-time">${t.date} - ${t.time}</p>
+          </div>`;
+        list.appendChild(div);
+      });
+    }
+
+    function filterTransfers(val) {
+      renderTransfers(val.trim());
+    }
+
+    function resetAll() {
+      if (confirm('⚠ Do you want to delete all data?')) {
+        localStorage.clear();
+        balance = 1000;
+        transfers = [];
+        currency = 'EGP';
+        document.getElementById('currency').value = currency;
+        updateBalanceDisplay();
+        renderTransfers();
+      }
+    }
+
+    updateBalanceDisplay();
+    renderTransfers();
+  </script>
+
+</body>
+</html>
